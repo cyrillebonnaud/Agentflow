@@ -1,0 +1,31 @@
+flow:
+  id: quick-prototype-v1
+  name: Quick Prototype
+  description: Fast artifact generation with no review cycles (~7 minutes). Produces a mini-PRD, UX brief, and 3 UX directions.
+
+  steps:
+    - id: mini-prd
+      type: explore
+      lead: product-manager
+      artifacts:
+        - name: mini-prd.md
+
+    - id: ux-brief
+      type: explore
+      lead: ux-designer
+      depends_on: [mini-prd]
+      artifacts:
+        - name: ux-brief.md
+      context:
+        - artifacts.mini-prd
+        - flow.input
+
+    - id: ux-directions
+      type: explore
+      lead: ux-designer
+      depends_on: [ux-brief]
+      artifact_type: md
+      context:
+        - artifacts.mini-prd
+        - artifacts.ux-brief
+        - flow.input

@@ -1,0 +1,32 @@
+{
+  "name": "agentflow",
+  "version": "0.1.0",
+  "description": "Local-first declarative multi-agent orchestration framework for Claude Code",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "agentflow": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/**/*.test.js",
+    "test:watch": "node --test --watch test/**/*.test.js",
+    "lint": "node --check src/**/*.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "src/",
+    "skills/",
+    "templates/",
+    "step-templates/",
+    ".claude-plugin/"
+  ],
+  "keywords": ["claude", "agentflow", "ai", "orchestration"],
+  "license": "MIT",
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {}
+}
