@@ -4,7 +4,6 @@ flow:
   description: Generates architecture approaches and a tech spec with engineering review.
   steps:
     - id: architecture
-      type: refine
       max_iterations: 3
       max_rounds: 2
       lead: tech-architect
@@ -14,12 +13,10 @@ flow:
         - flow.input
 
     - id: select-architecture
-      type: decide
       agent: engineering-lead
       depends_on: [architecture]
 
     - id: tech-writing
-      type: refine
       max_iterations: 2
       max_rounds: 1
       lead: tech-writer

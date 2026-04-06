@@ -4,7 +4,6 @@ flow:
   description: Generates pitch deck variants with market research, writing, and design review.
   steps:
     - id: market-research
-      type: refine
       max_iterations: 3
       max_rounds: 2
       lead: market-researcher
@@ -12,7 +11,6 @@ flow:
         - name: market-research.md
 
     - id: pitch-writing
-      type: refine
       max_iterations: 2
       max_rounds: 1
       lead: product-manager
@@ -24,12 +22,10 @@ flow:
         - flow.input
 
     - id: select-pitch
-      type: decide
       agent: track-selector
       depends_on: [pitch-writing]
 
     - id: design-review
-      type: refine
       max_iterations: 2
       max_rounds: 2
       lead: ux-designer

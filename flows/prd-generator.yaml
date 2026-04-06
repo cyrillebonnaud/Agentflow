@@ -4,7 +4,6 @@ flow:
   description: Generates a full PRD with market research, tech review, and optional legal review.
   steps:
     - id: market-research
-      type: refine
       max_iterations: 3
       max_rounds: 2
       lead: market-researcher
@@ -12,7 +11,6 @@ flow:
         - name: market-research.md
 
     - id: prd-writing
-      type: refine
       max_iterations: 3
       max_rounds: 2
       lead: product-manager
@@ -25,7 +23,6 @@ flow:
         - flow.input
 
     - id: tech-review
-      type: refine
       max_iterations: 3
       max_rounds: 2
       lead: tech-architect
@@ -38,7 +35,6 @@ flow:
         - artifacts.market-research
 
     - id: legal-review
-      type: refine
       max_iterations: 2
       max_rounds: 1
       lead: product-manager

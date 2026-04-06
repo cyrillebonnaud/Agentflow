@@ -5,13 +5,11 @@ flow:
 
   steps:
     - id: mini-prd
-      type: explore
       lead: product-manager
       artifacts:
         - name: mini-prd.md
 
     - id: ux-brief
-      type: explore
       lead: ux-designer
       depends_on: [mini-prd]
       artifacts:
@@ -21,7 +19,6 @@ flow:
         - flow.input
 
     - id: ux-directions
-      type: explore
       lead: ux-designer
       depends_on: [ux-brief]
       artifact_type: md

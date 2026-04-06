@@ -4,7 +4,6 @@ flow:
   description: Generates UX directions and a detailed brief with user research and copy review.
   steps:
     - id: user-research
-      type: refine
       max_iterations: 2
       max_rounds: 1
       lead: ux-researcher
@@ -12,7 +11,6 @@ flow:
         - name: user-research.md
 
     - id: ux-directions
-      type: explore
       max_iterations: 1
       lead: ux-designer
       depends_on: [user-research]
@@ -23,12 +21,10 @@ flow:
         - user_feedback.user-research.decisions
 
     - id: select-direction
-      type: decide
       agent: track-selector
       depends_on: [ux-directions]
 
     - id: ux-detail
-      type: refine
       max_iterations: 2
       max_rounds: 2
       lead: ux-designer
@@ -43,7 +39,6 @@ flow:
         - user_feedback.ux-directions.decisions
 
     - id: copy-review
-      type: refine
       max_iterations: 2
       max_rounds: 1
       lead: ux-writer

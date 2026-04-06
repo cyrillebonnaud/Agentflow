@@ -475,7 +475,8 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
         }
 
         executed.add(step.id);
-        const stepType = step.type || 'explore';
+        const stepType = step.type
+          || (step.agent ? 'decide' : step.reviewers ? 'refine' : 'explore');
         const currentState = await readRunState(runDir);
 
         switch (stepType) {
