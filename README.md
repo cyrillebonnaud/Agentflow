@@ -24,21 +24,12 @@ Everything is a file. No cloud dependency. No new auth to manage — subprocesse
 
 ## Installation
 
-From GitHub (no npm account needed):
-
 ```bash
 npm install github:cyrillebonnaud/agentflow
-npx agentflow install
+npx agentflow init
 ```
 
-Or as a global install (once npm is published):
-
-```bash
-npm install -g agentflow
-agentflow install
-```
-
-`agentflow install` copies the slash commands into `.claude/skills/` so Claude Code picks them up automatically.
+`agentflow init` scaffolds the project structure and installs the Claude Code slash commands into `.claude/skills/` in one step.
 
 Node ≥ 18 required.
 
@@ -47,17 +38,21 @@ Node ≥ 18 required.
 ## Quick start
 
 ```bash
-# 1. Scaffold a new project
-agentflow init
+# 1. Install and scaffold
+npm install github:cyrillebonnaud/agentflow
+npx agentflow init
 
-# 2. Run a built-in sample flow
-agentflow run flows/quick-prototype.yaml "Build a habit-tracker app"
+# 2. List available flow templates
+npx agentflow list
 
-# 3. Check status mid-run
-agentflow status <run-id>
+# 3. Run a flow
+npx agentflow run flows/quick-prototype.yaml "Build a habit-tracker app"
 
-# 4. Resume a crashed run
-agentflow resume <run-id>
+# 4. Check status mid-run
+npx agentflow status <run-id>
+
+# 5. Resume a crashed run
+npx agentflow resume <run-id>
 ```
 
 ---
