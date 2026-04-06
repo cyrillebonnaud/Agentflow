@@ -18,6 +18,7 @@
   "files": [
     "src/",
     "skills/",
+    "flows/",
     "templates/",
     "step-templates/",
     "sample-plugin/"
