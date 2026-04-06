@@ -29,7 +29,7 @@ async function spawnSubprocess({
   sentinelDir,
   promptContent,
   command = 'claude',
-  args = [],
+  args = ['--print', '--output-format', 'json', '--tools', ''],
   timeout = 120000,
 }) {
   // Write prompt.md before spawning
@@ -37,8 +37,15 @@ async function spawnSubprocess({
 
   return new Promise((resolve) => {
     const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
+      // Run in the sentinelDir (outside the project git repo) so that
+      // any git-checking hooks don't fire for the parent repo.
+      cwd: sentinelDir,
     });
+
+    // Feed the prompt via stdin then close it
+    proc.stdin.write(promptContent, 'utf8');
+    proc.stdin.end();
 
     // Write .pid immediately
     fs.writeFile(path.join(sentinelDir, '.pid'), String(proc.pid), 'utf8').catch(() => {});
