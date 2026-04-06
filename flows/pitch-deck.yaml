@@ -1,0 +1,36 @@
+flow:
+  id: pitch-deck-v1
+  name: Pitch Deck Generator
+  description: Generates pitch deck variants with market research, writing, and design review.
+  steps:
+    - id: market-research
+      extends: step-templates/standard-refine.yaml
+      lead: market-researcher
+      artifacts:
+        - name: market-research.md
+
+    - id: pitch-writing
+      extends: step-templates/light-refine.yaml
+      lead: product-manager
+      reviewers: [product-critic, ux-writer]
+      artifact_type: html
+      depends_on: [market-research]
+      context:
+        - artifacts.market-research
+        - flow.input
+
+    - id: select-pitch
+      type: decide
+      agent: track-selector
+      depends_on: [pitch-writing]
+
+    - id: design-review
+      extends: step-templates/design-refine.yaml
+      lead: ux-designer
+      tracks: inherit
+      depends_on: [select-pitch]
+      artifacts:
+        - name: design-feedback.md
+      context:
+        - artifacts.market-research
+        - artifacts.pitch-writing.{{track}}

@@ -1,0 +1,13 @@
+flow:
+  id: release-notes-v1
+  name: Release Notes Generator
+  description: Generates polished release notes from a change summary.
+  steps:
+    - id: writing
+      extends: step-templates/light-refine.yaml
+      lead: ux-writer
+      reviewers: [product-manager, tech-writer]
+      artifacts:
+        - name: release-notes.md
+      context:
+        - flow.input

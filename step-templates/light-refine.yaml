@@ -1,0 +1,5 @@
+type: refine
+reviewers: [product-critic]
+moderator: moderator
+max_iterations: 2
+max_rounds: 1

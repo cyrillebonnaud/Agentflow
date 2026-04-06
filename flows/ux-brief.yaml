@@ -1,0 +1,50 @@
+flow:
+  id: ux-brief-v1
+  name: UX Brief Generator
+  description: Generates UX directions and a detailed brief with user research and copy review.
+  steps:
+    - id: user-research
+      extends: step-templates/light-refine.yaml
+      lead: ux-researcher
+      artifacts:
+        - name: user-research.md
+
+    - id: ux-directions
+      extends: step-templates/explore.yaml
+      lead: ux-designer
+      depends_on: [user-research]
+      artifact_type: md
+      context:
+        - artifacts.user-research
+        - flow.input
+        - user_feedback.user-research.decisions
+
+    - id: select-direction
+      type: decide
+      agent: track-selector
+      depends_on: [ux-directions]
+
+    - id: ux-detail
+      extends: step-templates/design-refine.yaml
+      lead: ux-designer
+      reviewers: [design-critic, ui-designer]
+      tracks: inherit
+      depends_on: [select-direction]
+      artifacts:
+        - name: ux-brief.md
+      context:
+        - artifacts.user-research
+        - artifacts.ux-directions.{{track}}
+        - user_feedback.ux-directions.decisions
+
+    - id: copy-review
+      extends: step-templates/light-refine.yaml
+      lead: ux-writer
+      reviewers: [design-critic]
+      tracks: inherit
+      depends_on: [ux-detail]
+      artifacts:
+        - name: ux-copy.md
+      context:
+        - artifacts.ux-directions.{{track}}
+        - artifacts.ux-detail.{{track}}

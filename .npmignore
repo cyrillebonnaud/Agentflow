@@ -1,0 +1,23 @@
+# Development
+test/
+docs/
+.claude-plugin/development/
+
+# Sample content (not part of the package)
+sample-plugin/
+plugin-starter/
+flows/
+
+# Runtime artifacts
+runs/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# CI / misc
+*.log
+coverage/

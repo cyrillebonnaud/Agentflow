@@ -1,0 +1,6 @@
+{
+  "name": "agentflow",
+  "version": "0.1.0",
+  "description": "Declarative multi-agent orchestration flows for Claude Code",
+  "skills": ["./skills"]
+}

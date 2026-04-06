@@ -1,0 +1,42 @@
+flow:
+  id: prd-generator-v1
+  name: PRD Generator
+  description: Generates a full PRD with market research, tech review, and optional legal review.
+  steps:
+    - id: market-research
+      extends: step-templates/standard-refine.yaml
+      lead: market-researcher
+      artifacts:
+        - name: market-research.md
+
+    - id: prd-writing
+      extends: step-templates/standard-refine.yaml
+      lead: product-manager
+      reviewers: [product-critic, tech-architect, ux-researcher]
+      depends_on: [market-research]
+      artifacts:
+        - name: prd.md
+      context:
+        - artifacts.market-research
+        - flow.input
+
+    - id: tech-review
+      extends: step-templates/standard-refine.yaml
+      lead: tech-architect
+      reviewers: [engineering-lead, qa-reviewer]
+      depends_on: [prd-writing]
+      artifacts:
+        - name: tech-review.md
+      context:
+        - artifacts.prd
+        - artifacts.market-research
+
+    - id: legal-review
+      extends: step-templates/light-refine.yaml
+      lead: product-manager
+      depends_on: [prd-writing]
+      condition: "flow.input contains 'enterprise' or artifacts.prd contains 'compliance'"
+      artifacts:
+        - name: legal-review.md
+      context:
+        - artifacts.prd
