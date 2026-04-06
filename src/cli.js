@@ -67,45 +67,15 @@ async function cmdRun([flowFile, ...inputParts]) {
 
     console.log(`\nRun completed: ${runId}`);
     console.log(`Status: ${runState.status}`);
+    console.log(`Artifacts: ${runDir}/artifacts/`);
 
     for (const [stepId, step] of Object.entries(runState.steps)) {
       const icon = step.status === 'done' ? '✓' : step.status === 'skipped' ? '→' : step.status === 'failed' ? '✗' : '?';
       console.log(`  ${icon} ${stepId}: ${step.status}`);
     }
-
-    // Print artifact contents inline so they're visible in the conversation
-    const artifactsDir = path.join(runDir, 'artifacts');
-    try {
-      await printArtifactsInline(artifactsDir);
-    } catch {
-      console.log(`\nArtifacts saved to: ${artifactsDir}`);
-    }
   } catch (err) {
     console.error(`\nFlow failed: ${err.message}`);
     process.exit(1);
-  }
-}
-
-// ─── artifact printer ───────────────────────────────────────────────────────
-
-async function printArtifactsInline(dir, indent = '') {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const sorted = entries.sort((a, b) => {
-    // Files before directories, then alphabetical
-    if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? 1 : -1;
-    return a.name.localeCompare(b.name);
-  });
-  for (const entry of sorted) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await printArtifactsInline(full, indent + '  ');
-    } else {
-      const content = await fs.readFile(full, 'utf8');
-      console.log(`\n${'─'.repeat(60)}`);
-      console.log(`${indent}${entry.name}`);
-      console.log('─'.repeat(60));
-      console.log(content.trim());
-    }
   }
 }
 
