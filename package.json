@@ -20,7 +20,7 @@
     "skills/",
     "templates/",
     "step-templates/",
-    ".claude-plugin/"
+    "sample-plugin/"
   ],
   "keywords": ["claude", "claude-code", "agentflow", "ai", "agents", "orchestration", "multi-agent", "llm"],
   "license": "MIT",
