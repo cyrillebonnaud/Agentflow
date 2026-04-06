@@ -274,6 +274,10 @@ async function cmdInit([]) {
   }
 
   console.log('\n✓ Project initialized. Add flow YAML files to flows/');
+
+  // Install Claude Code skills automatically
+  console.log('');
+  await cmdInstall();
 }
 
 // ─── list ────────────────────────────────────────────────────────────────────
