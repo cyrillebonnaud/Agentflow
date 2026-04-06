@@ -27,6 +27,7 @@ async function main() {
     case 'validate': return cmdValidate(args);
     case 'init':   return cmdInit(args);
     case 'install': return cmdInstall(args);
+    case 'list':   return cmdList(args);
     default:
       console.error(`Unknown command: ${command || '(none)'}`);
       printHelp();
@@ -275,6 +276,38 @@ async function cmdInit([]) {
   console.log('\n✓ Project initialized. Add flow YAML files to flows/');
 }
 
+// ─── list ────────────────────────────────────────────────────────────────────
+
+async function cmdList() {
+  const flowsDir = path.resolve(process.cwd(), 'flows');
+
+  let files;
+  try {
+    files = (await fs.readdir(flowsDir)).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+  } catch {
+    console.log('No flows/ directory found. Run `agentflow init` first.');
+    return;
+  }
+
+  if (files.length === 0) {
+    console.log('No flow templates found in flows/');
+    return;
+  }
+
+  const yaml = require('js-yaml');
+  console.log('Available flows:\n');
+
+  for (const file of files.sort()) {
+    const content = await fs.readFile(path.join(flowsDir, file), 'utf8');
+    const flow = yaml.load(content);
+    const meta = flow.flow || flow;
+    const name = meta.name || file;
+    const description = meta.description || '';
+    console.log(`  ${file}`);
+    console.log(`    ${name}${description ? ' — ' + description : ''}`);
+  }
+}
+
 // ─── install ─────────────────────────────────────────────────────────────────
 
 async function cmdInstall() {
@@ -326,8 +359,9 @@ Commands:
   agentflow status [run-id]           Show run status
   agentflow resume <run-id>           Resume a paused/crashed run
   agentflow validate <flow.yaml>      Validate flow YAML
+  agentflow list                      List available flow templates
   agentflow init                      Initialize project
-  agentflow install                   Register Claude Code plugin
+  agentflow install                   Install Claude Code skills
 `);
 }
 
