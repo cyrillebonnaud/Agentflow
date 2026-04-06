@@ -267,7 +267,7 @@ async function cmdInit([]) {
   // Copy flat agents/, skills/, context/ into agentflow/
   const packageAgentsDir = path.join(packageRoot, 'agents');
   try {
-    for (const dir of ['agents', 'skills', 'context']) {
+    for (const dir of ['agents', 'skills']) {
       const srcDir = path.join(packageAgentsDir, dir);
       const destDir = path.join(agentflowDir, dir);
       await fs.mkdir(destDir, { recursive: true });
@@ -279,7 +279,7 @@ async function cmdInit([]) {
         }
       }
     }
-    console.log(`✓ Copied agentflow/agents/ agentflow/skills/ agentflow/context/`);
+    console.log(`✓ Copied agentflow/agents/ agentflow/skills/`);
   } catch {}
 
   const configPath = path.resolve(process.cwd(), 'agentflow.config.yaml');
@@ -436,7 +436,7 @@ async function cmdInstall() {
     // Copy flat agents/, skills/, context/
     const packageAgentsDir = path.join(packageRoot, 'agents');
     try {
-      for (const dir of ['agents', 'skills', 'context']) {
+      for (const dir of ['agents', 'skills']) {
         const srcDir = path.join(packageAgentsDir, dir);
         const destDir = path.join(agentflowDir, dir);
         await fs.mkdir(destDir, { recursive: true });
