@@ -1,0 +1,29 @@
+flow:
+  id: tech-design-v1
+  name: Tech Design Generator
+  description: Generates architecture approaches and a tech spec with engineering review.
+  steps:
+    - id: architecture
+      extends: step-templates/standard-refine.yaml
+      lead: tech-architect
+      reviewers: [engineering-lead]
+      artifact_type: md
+      context:
+        - flow.input
+
+    - id: select-architecture
+      type: decide
+      agent: engineering-lead
+      depends_on: [architecture]
+
+    - id: tech-writing
+      extends: step-templates/light-refine.yaml
+      lead: tech-writer
+      reviewers: [engineering-lead, qa-reviewer]
+      tracks: inherit
+      depends_on: [select-architecture]
+      artifacts:
+        - name: tech-spec.md
+      context:
+        - artifacts.architecture.{{track}}
+        - flow.input

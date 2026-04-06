@@ -1,0 +1,13 @@
+flow:
+  id: user-story-map-v1
+  name: User Story Map Generator
+  description: Generates a user story map with cross-functional review.
+  steps:
+    - id: story-mapping
+      extends: step-templates/standard-refine.yaml
+      lead: product-manager
+      reviewers: [product-critic, ux-researcher, engineering-lead]
+      artifacts:
+        - name: user-story-map.md
+      context:
+        - flow.input

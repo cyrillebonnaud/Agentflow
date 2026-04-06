@@ -1,0 +1,12 @@
+flow:
+  id: one-pager-v1
+  name: One-Pager Generator
+  description: Generates 2 one-pager variants with light review.
+  steps:
+    - id: writing
+      extends: step-templates/light-refine.yaml
+      lead: product-manager
+      reviewers: [product-critic, ux-writer]
+      artifact_type: html
+      context:
+        - flow.input
