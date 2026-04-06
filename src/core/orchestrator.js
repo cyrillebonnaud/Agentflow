@@ -346,7 +346,8 @@ async function executeRefineStep(step, runState, registry, runDir, pool, watchdo
         type: 'decisions',
       });
       await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
-      const reviewPath = path.join(runDir, 'artifacts', `${stepId}.review.md`);
+      // artifactPath is relative e.g. "artifacts/writing/v1/writing.md"
+      const reviewPath = path.join(runDir, path.dirname(artifactPath), `${stepId}.review.md`);
       const runId = path.basename(runDir);
       console.log(`\n✏️  Review and edit: ${reviewPath}`);
       console.log(`▶  When done: npx agentflow resume ${runId}\n`);
@@ -409,10 +410,14 @@ async function promoteReviewedArtifacts(runDir, resolvedSteps) {
     const stepState = runState.steps[step.id];
     if (!stepState || stepState.status !== 'awaiting_user_feedback') continue;
 
-    const artifactsDir = path.join(runDir, 'artifacts');
-    const reviewPath = path.join(artifactsDir, `${step.id}.review.md`);
-    const finalPath = path.join(artifactsDir, `${step.id}_final.md`);
-    const artifactPath = path.join(artifactsDir, `${step.id}.md`);
+    // artifact_path = e.g. "artifacts/writing/v1/writing.md"
+    const artifactRelPath = stepState.artifact_path;
+    if (!artifactRelPath) continue;
+
+    const artifactAbsPath = path.join(runDir, artifactRelPath);
+    const vDir = path.dirname(artifactAbsPath);
+    const reviewPath = path.join(vDir, `${step.id}.review.md`);
+    const finalPath = path.join(vDir, `${step.id}_final.md`);
 
     let reviewContent;
     try {
@@ -421,12 +426,12 @@ async function promoteReviewedArtifacts(runDir, resolvedSteps) {
       continue; // no review file, skip
     }
 
-    // Create _final.md and overwrite .md so downstream steps get the approved version
+    // Create _final.md and update the main artifact so downstream steps get approved content
     await fs.writeFile(finalPath, reviewContent, 'utf8');
-    await fs.writeFile(artifactPath, reviewContent, 'utf8');
+    await fs.writeFile(artifactAbsPath, reviewContent, 'utf8');
     await markStepStatus(runDir, step.id, 'done');
     await updateRunState(runDir, s => ({ ...s, status: 'running' }));
-    console.log(`✓ Approved: ${step.id}_final.md`);
+    console.log(`✓ Approved: ${path.relative(runDir, finalPath)}`);
   }
 }
 

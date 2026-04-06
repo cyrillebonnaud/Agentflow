@@ -1,10 +1,30 @@
 'use strict';
 
 const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
 const path = require('node:path');
 
 /**
- * Store an artifact for a step (optionally under a track).
+ * Determine the next version number for a step's artifact directory.
+ * Scans artifacts/<stepId>/ for existing v1, v2, … folders.
+ */
+async function nextVersion(runDir, stepId) {
+  const stepArtifactsDir = path.join(runDir, 'artifacts', stepId);
+  try {
+    const entries = await fs.readdir(stepArtifactsDir);
+    const versions = entries
+      .map(e => /^v(\d+)$/.exec(e))
+      .filter(Boolean)
+      .map(m => parseInt(m[1], 10));
+    return versions.length > 0 ? Math.max(...versions) + 1 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Store an artifact for a step under artifacts/<stepId>/v<N>/<stepId>.md
+ * Also saves a <stepId>.review.md copy for user editing.
  * @param {string} runDir
  * @param {string} stepId
  * @param {string} content
@@ -12,23 +32,24 @@ const path = require('node:path');
  * @returns {Promise<string>} relative artifact path
  */
 async function storeArtifact(runDir, stepId, content, trackSlug) {
-  let relPath;
-  let absPath;
-
   if (trackSlug) {
-    relPath = `artifacts/${stepId}/${trackSlug}.md`;
-    absPath = path.join(runDir, 'artifacts', stepId, `${trackSlug}.md`);
-    await fs.mkdir(path.join(runDir, 'artifacts', stepId), { recursive: true });
+    // Multi-track: keep flat layout artifacts/<stepId>/<trackSlug>.md
+    const dir = path.join(runDir, 'artifacts', stepId);
+    await fs.mkdir(dir, { recursive: true });
+    const absPath = path.join(dir, `${trackSlug}.md`);
     await fs.writeFile(absPath, content, 'utf8');
-  } else {
-    relPath = `artifacts/${stepId}.md`;
-    absPath = path.join(runDir, 'artifacts', `${stepId}.md`);
-    await fs.writeFile(absPath, content, 'utf8');
-    // Save editable copy for user review
-    await fs.writeFile(path.join(runDir, 'artifacts', `${stepId}.review.md`), content, 'utf8');
+    return `artifacts/${stepId}/${trackSlug}.md`;
   }
 
-  return relPath;
+  // Single-step versioned layout: artifacts/<stepId>/v<N>/<stepId>.md
+  const version = await nextVersion(runDir, stepId);
+  const vDir = path.join(runDir, 'artifacts', stepId, `v${version}`);
+  await fs.mkdir(vDir, { recursive: true });
+
+  await fs.writeFile(path.join(vDir, `${stepId}.md`), content, 'utf8');
+  await fs.writeFile(path.join(vDir, `${stepId}.review.md`), content, 'utf8');
+
+  return `artifacts/${stepId}/v${version}/${stepId}.md`;
 }
 
 /**
@@ -44,7 +65,10 @@ async function readArtifact(runDir, stepId, trackSlug) {
   if (trackSlug) {
     absPath = path.join(runDir, 'artifacts', stepId, `${trackSlug}.md`);
   } else {
-    absPath = path.join(runDir, 'artifacts', `${stepId}.md`);
+    // Read latest version: artifacts/<stepId>/v<N>/<stepId>.md
+    const version = (await nextVersion(runDir, stepId)) - 1;
+    if (version < 1) return null;
+    absPath = path.join(runDir, 'artifacts', stepId, `v${version}`, `${stepId}.md`);
   }
 
   try {
@@ -73,29 +97,32 @@ async function listArtifacts(runDir) {
   }
 
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith('.md')) {
-      // Direct file: artifacts/<stepId>.md
-      const stepId = entry.name.slice(0, -3); // strip .md
+    if (!entry.isDirectory()) continue;
+    const stepId = entry.name;
+    const stepDir = path.join(artifactsDir, stepId);
+    let stepEntries;
+    try {
+      stepEntries = await fs.readdir(stepDir, { withFileTypes: true });
+    } catch { continue; }
+
+    // Versioned layout: artifacts/<stepId>/v<N>/<stepId>.md
+    const versionDirs = stepEntries.filter(e => e.isDirectory() && /^v\d+$/.test(e.name));
+    if (versionDirs.length > 0) {
+      const latest = versionDirs.sort((a, b) => {
+        return parseInt(a.name.slice(1)) - parseInt(b.name.slice(1));
+      }).at(-1).name;
       results.push({
         stepId,
         trackSlug: null,
-        path: `artifacts/${entry.name}`,
+        path: `artifacts/${stepId}/${latest}/${stepId}.md`,
       });
-    } else if (entry.isDirectory()) {
-      // Subdirectory: artifacts/<stepId>/<trackSlug>.md
-      const stepId = entry.name;
-      let subEntries;
-      try {
-        subEntries = await fs.readdir(path.join(artifactsDir, entry.name), { withFileTypes: true });
-      } catch {
-        continue;
-      }
-      for (const sub of subEntries) {
-        if (sub.isFile() && sub.name.endsWith('.md')) {
-          const trackSlug = sub.name.slice(0, -3);
+    } else {
+      // Multi-track layout: artifacts/<stepId>/<trackSlug>.md
+      for (const sub of stepEntries) {
+        if (sub.isFile() && sub.name.endsWith('.md') && !sub.name.includes('.review') && !sub.name.includes('_final')) {
           results.push({
             stepId,
-            trackSlug,
+            trackSlug: sub.name.slice(0, -3),
             path: `artifacts/${stepId}/${sub.name}`,
           });
         }
