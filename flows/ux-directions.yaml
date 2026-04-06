@@ -3,6 +3,16 @@ flow:
   name: UX Directions Generator
   description: Generates 3 UX directions from a pitch, with design critique and user selection.
   steps:
+    - id: ux-brief
+      lead: ux-researcher
+      reviewers: [ux-designer, product-manager]
+      max_iterations: 2
+      max_rounds: 1
+      artifacts:
+        - name: ux-brief.md
+      context:
+        - flow.input
+
     - id: ux-directions
       lead: ux-designer
       reviewers: [ux-researcher, design-critic]
@@ -13,7 +23,9 @@ flow:
         - name: direction-1.html
         - name: direction-2.html
         - name: direction-3.html
+      depends_on: [ux-brief]
       context:
+        - artifacts.ux-brief
         - flow.input
 
     - id: select-direction
@@ -31,19 +43,7 @@ flow:
       artifacts:
         - name: ux-direction.html
       context:
+        - artifacts.ux-brief
         - artifacts.ux-directions.{{track}}
         - flow.input
 
-    - id: ux-brief
-      lead: ux-designer
-      reviewers: [ux-researcher, design-critic]
-      max_iterations: 2
-      max_rounds: 2
-      tracks: inherit
-      depends_on: [ux-detail]
-      artifacts:
-        - name: ux-brief.md
-      context:
-        - artifacts.ux-directions.{{track}}
-        - artifacts.ux-detail.{{track}}
-        - flow.input
