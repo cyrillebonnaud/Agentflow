@@ -467,9 +467,13 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
     reg = await buildRegistry({ pluginDirs, localTemplatesDir });
   }
 
-  // Initialize run
+  // Initialize run — use flowId as run ID, add random suffix only if folder already exists
   const crypto = require('node:crypto');
-  const effectiveRunId = runId || `${flowId}-${crypto.randomBytes(3).toString('hex')}`;
+  const fsSync = require('node:fs');
+  const baseRunDir = path.join(runsDir, flowId);
+  const effectiveRunId = runId || (fsSync.existsSync(baseRunDir)
+    ? `${flowId}-${crypto.randomBytes(3).toString('hex')}`
+    : flowId);
   const runDir = path.join(runsDir, effectiveRunId);
 
   try {

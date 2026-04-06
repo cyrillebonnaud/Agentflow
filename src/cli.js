@@ -45,7 +45,7 @@ async function cmdRun([flowFile, ...inputParts]) {
 
   const flowInput = inputParts.join(' ');
   const resolvedFlow = path.resolve(process.cwd(), flowFile);
-  const runsDir = path.resolve(process.cwd(), 'runs');
+  const runsDir = path.resolve(process.cwd(), 'agentflow', 'runs');
 
   try {
     await fs.access(resolvedFlow);
@@ -115,7 +115,7 @@ async function printArtifactsInline(dir, indent = '') {
 async function cmdStatus([runId]) {
   if (!runId) {
     // List recent runs
-    const runsDir = path.resolve(process.cwd(), 'runs');
+    const runsDir = path.resolve(process.cwd(), 'agentflow', 'runs');
     try {
       const entries = await fs.readdir(runsDir);
       if (entries.length === 0) {
@@ -132,7 +132,7 @@ async function cmdStatus([runId]) {
     return;
   }
 
-  const runsDir = path.resolve(process.cwd(), 'runs');
+  const runsDir = path.resolve(process.cwd(), 'agentflow', 'runs');
   const runDir = path.join(runsDir, runId);
   const runJsonPath = path.join(runDir, 'run.json');
 
@@ -165,7 +165,7 @@ async function cmdResume([runId]) {
     process.exit(1);
   }
 
-  const runsDir = path.resolve(process.cwd(), 'runs');
+  const runsDir = path.resolve(process.cwd(), 'agentflow', 'runs');
   const runDir = path.join(runsDir, runId);
   const runJsonPath = path.join(runDir, 'run.json');
 
@@ -239,7 +239,7 @@ async function cmdInit([]) {
   const dirs = [
     path.join(agentflowDir, 'flows'),
     path.join(agentflowDir, 'templates'),
-    path.resolve(process.cwd(), 'runs'),
+    path.resolve(process.cwd(), 'agentflow', 'runs'),
   ];
   for (const d of dirs) {
     await fs.mkdir(d, { recursive: true });
@@ -294,14 +294,14 @@ async function cmdInit([]) {
         max_reviewer_parallel: 6,
         max_moderator_parallel: 4,
       },
-      paths: { flows: './agentflow/flows', templates: './agentflow/templates', runs: './runs' },
+      paths: { flows: './agentflow/flows', templates: './agentflow/templates', runs: './agentflow/runs' },
     };
     await fs.writeFile(configPath, yaml.dump(config), 'utf8');
     console.log(`✓ Created agentflow.config.yaml`);
   }
 
   const gitignorePath = path.resolve(process.cwd(), '.gitignore');
-  const gitignoreEntry = '\n# Agentflow runs\nruns/*/\n!runs/.gitkeep\n';
+  const gitignoreEntry = '\n# Agentflow runs\nagentflow/runs/*/\n!agentflow/runs/.gitkeep\n';
   try {
     const existing = await fs.readFile(gitignorePath, 'utf8');
     if (!existing.includes('Agentflow runs')) {
