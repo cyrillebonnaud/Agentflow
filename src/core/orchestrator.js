@@ -5,11 +5,21 @@ const fs = require('node:fs/promises');
 const yaml = require('js-yaml');
 
 const { initRun } = require('../state/run-init');
-const { readRunState, updateRunState, markStepStatus } = require('../state/run-state');
+const { readRunState, updateRunState, markStepStatus, markTrackStatus } = require('../state/run-state');
 const { buildRegistry } = require('../registry/resolver');
 const { resolveStep } = require('./step-template-loader');
 const { evaluateCondition } = require('./condition-evaluator');
 const { buildPrompt } = require('../prompt/prompt-builder');
+const { buildTrackContext } = require('../prompt/track-context-builder');
+const { storeArtifact } = require('../state/artifact-store');
+const { spawnLeadsParallel } = require('../subprocess/track-spawner');
+const { runReviewLoop } = require('../review/review-loop');
+const { writeUserRequest, readUserResponse, hasUserResponse } = require('../interaction/ask-user');
+const { writeTrackSelectionRequest, readTrackSelection } = require('../interaction/ask-track-selection');
+const { createTrack, markTrackDone, markTrackFailed, getSurvivingTracks } = require('../tracks/track-manager');
+const { resolveArtifactMode } = require('../tracks/artifact-mode-resolver');
+const { parseSlug } = require('../tracks/slug-parser');
+const { sanitizeSlug, ensureUnique } = require('../tracks/slug-sanitizer');
 const runner = require('../subprocess/runner');
 const { SentinelWatcher } = require('../subprocess/subprocess-watcher');
 const { Watchdog } = require('../subprocess/subprocess-watchdog');
@@ -41,9 +51,23 @@ function buildConditionContext(runState) {
     if (step.artifact_path) {
       artifacts[stepId] = step._artifactContent || '';
     }
+    // Multi-track: also expose per-track artifacts
+    if (step.tracks) {
+      for (const [trackSlug, track] of Object.entries(step.tracks)) {
+        if (track.artifact_path) {
+          artifacts[`${stepId}.${trackSlug}`] = '';
+        }
+      }
+    }
   }
+
+  const survivingTracks = Object.values(runState.steps || {})
+    .flatMap(s => Object.entries(s.tracks || {})
+      .filter(([, t]) => t.status === 'done')
+      .map(([slug]) => slug));
+
   return {
-    surviving_tracks: { count: 0, names: [] },
+    surviving_tracks: { count: survivingTracks.length, names: survivingTracks },
     flow: { input: runState.flow_input, id: runState.flow_id },
     artifacts,
     user_feedback: runState.user_feedback || {},
@@ -60,121 +84,319 @@ function depsResolved(step, runState) {
   const deps = step.depends_on || [];
   return deps.every(dep => {
     const depStep = runState.steps[dep];
-    return depStep && depStep.status === 'done';
+    return depStep && (depStep.status === 'done' || depStep.status === 'skipped');
   });
 }
 
 /**
- * Execute a single explore step (single artifact, no review cycle).
+ * Resolve the agent entry from registry, throw with clear message if missing.
+ */
+function requireAgent(registry, agentId, stepId) {
+  const entry = registry.agents.get(agentId);
+  if (!entry) throw new Error(`Step ${stepId}: agent '${agentId}' not found in registry`);
+  return entry;
+}
+
+/**
+ * Execute a single explore step — single or multi-track, no review cycle.
  */
 async function executeExploreStep(step, runState, registry, runDir, pool, watchdog, config) {
   const { id: stepId } = step;
-
-  // Resolve agent
   const leadId = step.lead;
   if (!leadId) throw new Error(`Step ${stepId}: missing 'lead' agent`);
+  const agentEntry = requireAgent(registry, leadId, stepId);
 
-  const agentEntry = registry.agents.get(leadId);
-  if (!agentEntry) throw new Error(`Step ${stepId}: agent '${leadId}' not found in registry`);
+  // Determine artifact mode
+  const mode = step.artifact_type ? 'delegated' : (step.artifacts ? 'declarative' : 'delegated');
 
-  // Resolve template
-  let templatePath = null;
-  if (step.artifacts && step.artifacts[0] && step.artifacts[0].template) {
-    const tmpl = registry.templates.get(step.artifacts[0].template);
-    if (tmpl) templatePath = tmpl.path;
+  if (mode === 'declarative' && step.artifacts && step.artifacts.length > 0) {
+    // Single or multi-artifact declarative mode
+    const trackDefs = step.artifacts.map((art, i) => ({
+      slug: art.name?.replace(/\.(md|html)$/, '') || `track-${i + 1}`,
+      artifactName: art.name || `${stepId}.md`,
+      template: art.template || null,
+    }));
+
+    const usedSlugs = new Set();
+    const tracks = await Promise.all(trackDefs.map(async (td, i) => {
+      const slug = ensureUnique(sanitizeSlug(td.slug), usedSlugs);
+      usedSlugs.add(slug);
+
+      let templatePath = null;
+      if (td.template) {
+        const tmpl = registry.templates.get(td.template);
+        if (tmpl) templatePath = tmpl.path;
+      }
+
+      const { artifacts: ctxArtifacts, userFeedback, flowContext } = await buildTrackContext({
+        runDir, runState, stepId, trackSlug: slug,
+        trackIndex: i + 1, trackTotal: trackDefs.length,
+        contextDecls: step.context,
+      });
+
+      const promptContent = await buildPrompt({
+        agentPath: agentEntry.path,
+        skillPaths: [],
+        contextPaths: [],
+        templatePath,
+        flowContext,
+        artifacts: ctxArtifacts,
+        userFeedback,
+      });
+
+      await createTrack(runDir, stepId, slug);
+      return { slug, promptContent, artifactName: td.artifactName };
+    }));
+
+    await markStepStatus(runDir, stepId, 'running_lead');
+
+    const results = await spawnLeadsParallel({
+      runDir, stepId,
+      tracks: tracks.map(t => ({ slug: t.slug, promptContent: t.promptContent })),
+      version: 1, pool, timeoutMs: config.subprocessTimeoutMs,
+    });
+
+    // Store artifacts and update track state
+    let anyFailed = false;
+    for (const result of results) {
+      const trackDef = tracks.find(t => t.slug === result.slug);
+      if (result.status === 'done') {
+        const outputPath = path.join(runDir, 'steps', stepId, result.slug, 'v1', 'lead', 'output.md');
+        let content = '';
+        try { content = await fs.readFile(outputPath, 'utf8'); } catch {}
+
+        // Single track → artifacts/<stepId>.md; multi-track → artifacts/<stepId>/<slug>.md
+        const isSingleArtifact = tracks.length === 1;
+        const trackSlugForStore = isSingleArtifact ? undefined : result.slug;
+        const artifactPath = await storeArtifact(runDir, stepId, content, trackSlugForStore);
+        await markTrackDone(runDir, stepId, result.slug, { artifact_path: artifactPath });
+      } else {
+        anyFailed = true;
+        await markTrackFailed(runDir, stepId, result.slug, result.content);
+      }
+    }
+
+    if (anyFailed && tracks.length === 1) {
+      await markStepStatus(runDir, stepId, 'failed');
+      throw new Error(`Step ${stepId} failed`);
+    }
+
+    await markStepStatus(runDir, stepId, 'done');
+  } else {
+    // Delegated mode — single lead, Claude decides output structure
+    const sentinelDir = path.join(runDir, 'steps', stepId, 'v1', 'lead');
+    await fs.mkdir(sentinelDir, { recursive: true });
+
+    const { artifacts: ctxArtifacts, userFeedback, flowContext } = await buildTrackContext({
+      runDir, runState, stepId, trackSlug: 'main',
+      trackIndex: 1, trackTotal: 1,
+      contextDecls: step.context,
+    });
+
+    const promptContent = await buildPrompt({
+      agentPath: agentEntry.path,
+      skillPaths: [],
+      contextPaths: [],
+      templatePath: null,
+      flowContext,
+      artifacts: ctxArtifacts,
+      userFeedback,
+    });
+
+    const release = await pool.acquire('lead');
+    watchdog.register(sentinelDir, config.subprocessTimeoutMs);
+    await markStepStatus(runDir, stepId, 'running_lead');
+
+    try {
+      const watcher = new SentinelWatcher();
+      await new Promise((resolve, reject) => {
+        watcher.on('done', async ({ content }) => {
+          watchdog.deregister(sentinelDir);
+          let artifactContent = '';
+          try { artifactContent = await fs.readFile(path.join(sentinelDir, 'output.md'), 'utf8'); } catch {}
+          const artifactPath = await storeArtifact(runDir, stepId, artifactContent);
+          await markStepStatus(runDir, stepId, 'done', {
+            artifact_path: artifactPath,
+            _artifactContent: artifactContent,
+            cost_usd: content.cost_usd || 0,
+          });
+          resolve();
+        });
+        watcher.on('failed', async ({ content }) => {
+          watchdog.deregister(sentinelDir);
+          await markStepStatus(runDir, stepId, 'failed', { error: content });
+          reject(new Error(`Step ${stepId} failed: ${JSON.stringify(content)}`));
+        });
+        watcher.poll(sentinelDir, 500);
+        runner.spawnSubprocess({ sentinelDir, promptContent, timeout: config.subprocessTimeoutMs }).catch(reject);
+      });
+      watcher.stop();
+    } finally {
+      release();
+    }
+  }
+}
+
+/**
+ * Execute a refine step — lead + review cycle per track.
+ */
+async function executeRefineStep(step, runState, registry, runDir, pool, watchdog, config) {
+  const { id: stepId } = step;
+  const leadId = step.lead;
+  if (!leadId) throw new Error(`Step ${stepId}: missing 'lead' agent`);
+  const agentEntry = requireAgent(registry, leadId, stepId);
+
+  const reviewers = step.reviewers || [];
+  const moderatorId = step.moderator || 'moderator';
+  const maxRounds = step.max_rounds || 2;
+  const maxIterations = step.max_iterations || 3;
+
+  // Determine tracks (inherit from depends_on step or declarative)
+  let tracks;
+  if (step.tracks === 'inherit') {
+    // Find the last step with tracks
+    const depStepId = (step.depends_on || [])[0];
+    const depStep = depStepId ? runState.steps[depStepId] : null;
+    if (depStep && depStep.tracks) {
+      const surviving = await getSurvivingTracks(runDir, depStepId);
+      tracks = surviving.map(slug => ({ slug, artifactName: `${slug}.md` }));
+    } else {
+      tracks = [{ slug: 'main', artifactName: `${stepId}.md` }];
+    }
+  } else if (step.artifacts && step.artifacts.length > 0) {
+    const usedSlugs = new Set();
+    tracks = step.artifacts.map(art => {
+      const slug = ensureUnique(sanitizeSlug(art.name?.replace(/\.(md|html)$/, '') || 'main'), usedSlugs);
+      usedSlugs.add(slug);
+      return { slug, artifactName: art.name || `${slug}.md` };
+    });
+  } else {
+    tracks = [{ slug: 'main', artifactName: `${stepId}.md` }];
   }
 
-  // Gather prior artifacts
-  const artifacts = {};
-  for (const [sid, s] of Object.entries(runState.steps)) {
-    if (s.status === 'done' && s._artifactContent) {
-      artifacts[sid] = s._artifactContent;
+  await markStepStatus(runDir, stepId, 'running_lead');
+
+  // Execute lead + review loop for each track
+  for (const track of tracks) {
+    await createTrack(runDir, stepId, track.slug);
+
+    // Phase 1: Lead
+    const sentinelDir = path.join(runDir, 'steps', stepId, track.slug, 'v1', 'lead');
+    await fs.mkdir(sentinelDir, { recursive: true });
+
+    const { artifacts: ctxArtifacts, userFeedback, flowContext } = await buildTrackContext({
+      runDir, runState, stepId, trackSlug: track.slug,
+      trackIndex: tracks.indexOf(track) + 1, trackTotal: tracks.length,
+      contextDecls: step.context,
+    });
+
+    const leadPrompt = await buildPrompt({
+      agentPath: agentEntry.path, skillPaths: [], contextPaths: [], templatePath: null,
+      flowContext, artifacts: ctxArtifacts, userFeedback,
+    });
+
+    const leadRelease = await pool.acquire('lead');
+    watchdog.register(sentinelDir, config.subprocessTimeoutMs);
+
+    try {
+      const leadWatcher = new SentinelWatcher();
+      await new Promise((resolve, reject) => {
+        leadWatcher.on('done', async () => { watchdog.deregister(sentinelDir); leadWatcher.stop(); resolve(); });
+        leadWatcher.on('failed', async ({ content }) => {
+          watchdog.deregister(sentinelDir);
+          leadWatcher.stop();
+          reject(new Error(`Step ${stepId} track ${track.slug} lead failed`));
+        });
+        leadWatcher.poll(sentinelDir, 500);
+        runner.spawnSubprocess({ sentinelDir, promptContent: leadPrompt, timeout: config.subprocessTimeoutMs }).catch(reject);
+      });
+    } finally {
+      leadRelease();
+    }
+
+    // Phase 2: Review loop
+    await markStepStatus(runDir, stepId, 'running_reviews');
+
+    const reviewLoopResult = await runReviewLoop({
+      runDir, stepId, trackSlug: track.slug, version: 1,
+      reviewers, moderatorId,
+      maxRounds,
+      buildReviewerPrompt: async (reviewerId, round, priorReviews) => {
+        const leadOutput = await fs.readFile(path.join(sentinelDir, 'output.md'), 'utf8').catch(() => '');
+        return `Review the following artifact:\n\n${leadOutput}\n\nRound: ${round}`;
+      },
+      buildModeratorPrompt: async (round, reviews) => {
+        return `Assess reviewer convergence for round ${round}. Reviews:\n\n${reviews.map(r => `### ${r.reviewerId}\n${r.content}`).join('\n\n')}`;
+      },
+      pool,
+      subprocessTimeoutMs: config.subprocessTimeoutMs,
+    });
+
+    // Phase 3: Store final artifact
+    const leadOutput = await fs.readFile(path.join(sentinelDir, 'output.md'), 'utf8').catch(() => '');
+    const isSingle = tracks.length === 1;
+    const artifactPath = await storeArtifact(runDir, stepId, leadOutput, isSingle ? undefined : track.slug);
+    await markTrackDone(runDir, stepId, track.slug, { artifact_path: artifactPath });
+
+    // Phase 4: User feedback (awaiting_user_feedback)
+    if (reviewLoopResult.synthesisPath) {
+      await markStepStatus(runDir, stepId, 'awaiting_user_feedback');
+      await writeUserRequest(runDir, stepId, {
+        question: `Review synthesis for step "${stepId}" track "${track.slug}" and provide feedback.`,
+        type: 'decisions',
+      });
+      // In Phase 1b we pause here — user resumes with /agentflow:resume
+      await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
+      return; // stop execution, user must resume
     }
   }
 
-  const flowContext = {
-    flow: { input: runState.flow_input, id: runState.flow_id },
-    step: { id: stepId },
-    track: {},
-  };
+  await markStepStatus(runDir, stepId, 'done');
+}
 
-  const promptContent = await buildPrompt({
-    agentPath: agentEntry.path,
-    skillPaths: [],
-    contextPaths: [],
-    templatePath,
-    flowContext,
-    artifacts,
-    userFeedback: runState.user_feedback || {},
-  });
+/**
+ * Execute a decide step — presents track selection to user.
+ */
+async function executeDecideStep(step, runState, registry, runDir, pool, watchdog, config) {
+  const { id: stepId } = step;
+  const depStepId = (step.depends_on || [])[0];
 
-  // Determine sentinel dir
-  const sentinelDir = path.join(runDir, 'steps', stepId, 'v1', 'lead');
-  await fs.mkdir(sentinelDir, { recursive: true });
-
-  // Acquire pool slot
-  const release = await pool.acquire('lead');
-  watchdog.register(sentinelDir, config.subprocessTimeoutMs);
-
-  try {
-    await markStepStatus(runDir, stepId, 'running_lead');
-
-    const watcher = new SentinelWatcher();
-
-    await new Promise((resolve, reject) => {
-      watcher.on('done', async ({ content }) => {
-        watchdog.deregister(sentinelDir);
-        const outputPath = path.join(sentinelDir, 'output.md');
-        let artifactContent = '';
-        try { artifactContent = await fs.readFile(outputPath, 'utf8'); } catch {}
-
-        // Copy to artifacts/
-        const artifactName = (step.artifacts && step.artifacts[0] && step.artifacts[0].name) || `${stepId}.md`;
-        const artifactPath = path.join(runDir, 'artifacts', artifactName);
-        await fs.mkdir(path.dirname(artifactPath), { recursive: true });
-        await fs.writeFile(artifactPath, artifactContent, 'utf8');
-
-        await markStepStatus(runDir, stepId, 'done', {
-          artifact_path: `artifacts/${artifactName}`,
-          _artifactContent: artifactContent,
-          cost_usd: content.cost_usd || 0,
-        });
-        resolve();
-      });
-
-      watcher.on('failed', async ({ content }) => {
-        watchdog.deregister(sentinelDir);
-        await markStepStatus(runDir, stepId, 'failed', { error: content });
-        reject(new Error(`Step ${stepId} failed: ${JSON.stringify(content)}`));
-      });
-
-      watcher.poll(sentinelDir, 500);
-
-      // Spawn the subprocess
-      runner.spawnSubprocess({
-        sentinelDir,
-        promptContent,
-        timeout: config.subprocessTimeoutMs,
-      }).catch(reject);
-    });
-
-    watcher.stop();
-  } finally {
-    release();
+  if (!depStepId) {
+    throw new Error(`Step ${stepId} (decide): must have at least one depends_on step`);
   }
+
+  const allTracks = Object.keys(runState.steps[depStepId]?.tracks || {})
+    .filter(slug => runState.steps[depStepId].tracks[slug].status === 'done');
+
+  if (allTracks.length === 0) {
+    // Nothing to select, skip
+    await markStepStatus(runDir, stepId, 'skipped', { reason: 'no surviving tracks' });
+    return;
+  }
+
+  // Check if user has already provided selection
+  if (await hasUserResponse(runDir, stepId)) {
+    const selection = await readTrackSelection(runDir, stepId, allTracks);
+    if (selection) {
+      // Apply selection — discard the dropped tracks
+      for (const slug of selection.discard) {
+        await markTrackStatus(runDir, depStepId, slug, 'discarded');
+      }
+      await markStepStatus(runDir, stepId, 'done', {
+        surviving_tracks: selection.keep,
+        discarded_tracks: selection.discard,
+      });
+      return;
+    }
+  }
+
+  // Pause and ask user for track selection
+  await writeTrackSelectionRequest(runDir, stepId, allTracks);
+  // Note: writeTrackSelectionRequest already sets status to 'awaiting_track_selection' and pauses run
 }
 
 /**
  * Main orchestrator — runs a flow from start to finish.
- *
- * @param {object} opts
- * @param {string} opts.flowFile    - path to flow YAML file
- * @param {string} opts.flowInput   - user input string
- * @param {string} opts.runsDir     - directory where runs are stored
- * @param {object} [opts.config]    - concurrency/timeout config overrides
- * @param {object} [opts.registry]  - pre-built registry (for testing)
- * @param {string} [opts.runId]     - explicit run ID (for testing / resume)
- * @returns {Promise<{ runId, runDir, runState }>}
  */
 async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = null, runId = null }) {
   const mergedConfig = { ...DEFAULT_CONCURRENCY, ...config };
@@ -200,9 +422,7 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
     const pluginDirs = [];
     try {
       const entries = await fs.readdir(pluginsDir);
-      for (const e of entries) {
-        pluginDirs.push(path.join(pluginsDir, e));
-      }
+      for (const e of entries) pluginDirs.push(path.join(pluginsDir, e));
     } catch {}
     reg = await buildRegistry({ pluginDirs, localTemplatesDir });
   }
@@ -212,45 +432,29 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
   const effectiveRunId = runId || `${flowId}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex')}`;
   const runDir = path.join(runsDir, effectiveRunId);
 
-  const stepsMap = Object.fromEntries(
-    resolvedSteps.map(s => [s.id, {
-      id: s.id,
-      type: s.type || 'explore',
-      status: 'pending',
-      depends_on: s.depends_on || [],
-      condition: s.condition || null,
-    }])
-  );
-
-  await initRun({
-    runDir,
-    flowId,
-    flowFile,
-    flowInput,
-    steps: resolvedSteps,
-  });
+  try {
+    await initRun({ runDir, flowId, flowFile, flowInput, steps: resolvedSteps });
+  } catch (err) {
+    if (!err.message.includes('already exists')) throw err;
+    // Resume mode — run already initialized
+  }
 
   // Set up concurrency infrastructure
   const pool = new SubprocessPool({
-    maxTotal: mergedConfig.maxTotal,
-    maxLead: mergedConfig.maxLead,
-    maxReviewer: mergedConfig.maxReviewer,
-    maxModerator: mergedConfig.maxModerator,
+    maxTotal: mergedConfig.maxTotal, maxLead: mergedConfig.maxLead,
+    maxReviewer: mergedConfig.maxReviewer, maxModerator: mergedConfig.maxModerator,
   });
   const watchdog = new Watchdog({ pollIntervalMs: mergedConfig.watchdogPollIntervalMs });
   watchdog.start();
 
   try {
-    // Main step execution loop
     const executed = new Set();
 
     const executeReadySteps = async () => {
       const runState = await readRunState(runDir);
       const pending = resolvedSteps.filter(s =>
-        !executed.has(s.id) &&
-        runState.steps[s.id]?.status === 'pending'
+        !executed.has(s.id) && runState.steps[s.id]?.status === 'pending'
       );
-
       const ready = pending.filter(s => depsResolved(s, runState));
 
       for (const step of ready) {
@@ -267,46 +471,52 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
 
         executed.add(step.id);
         const stepType = step.type || 'explore';
+        const currentState = await readRunState(runDir);
 
-        if (stepType === 'explore') {
-          await executeExploreStep(step, runState, reg, runDir, pool, watchdog, mergedConfig);
-        } else if (stepType === 'validate') {
-          // validate: pause and write a request file, then mark as awaiting_validation
-          const requestPath = path.join(runDir, 'steps', step.id, 'user-feedback-request.json');
-          await fs.mkdir(path.dirname(requestPath), { recursive: true });
-          await fs.writeFile(requestPath, JSON.stringify({ step: step.id, type: 'validate' }, null, 2));
-          await markStepStatus(runDir, step.id, 'awaiting_validation');
-          // For now, stop the flow — user must resume
-          await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
-          return false; // signal to stop loop
-        } else {
-          // refine and decide are stubs for Phase 1b
-          await markStepStatus(runDir, step.id, 'skipped', { reason: `step type '${stepType}' not yet implemented` });
+        switch (stepType) {
+          case 'explore':
+            await executeExploreStep(step, currentState, reg, runDir, pool, watchdog, mergedConfig);
+            break;
+          case 'refine':
+            await executeRefineStep(step, currentState, reg, runDir, pool, watchdog, mergedConfig);
+            break;
+          case 'decide':
+            await executeDecideStep(step, currentState, reg, runDir, pool, watchdog, mergedConfig);
+            break;
+          case 'validate': {
+            const reqPath = path.join(runDir, 'steps', step.id, 'user-feedback-request.json');
+            await fs.mkdir(path.dirname(reqPath), { recursive: true });
+            await fs.writeFile(reqPath, JSON.stringify({ step: step.id, type: 'validate' }, null, 2));
+            await markStepStatus(runDir, step.id, 'awaiting_validation');
+            await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
+            return false;
+          }
+          default:
+            await markStepStatus(runDir, step.id, 'skipped', { reason: `unknown step type '${stepType}'` });
         }
-      }
 
-      return true; // continue loop
+        // Check if we paused
+        const afterState = await readRunState(runDir);
+        if (afterState.status === 'paused') return false;
+      }
+      return true;
     };
 
     let continueLoop = true;
     while (continueLoop) {
       const runState = await readRunState(runDir);
+      if (runState.status === 'paused') break;
+
       const allDone = resolvedSteps.every(s => {
         const st = runState.steps[s.id]?.status;
-        return st === 'done' || st === 'skipped' || st === 'failed';
+        return ['done', 'skipped', 'failed'].includes(st);
       });
-
       if (allDone) break;
 
       continueLoop = await executeReadySteps();
-
-      if (continueLoop) {
-        // Small yield to allow async operations to settle
-        await new Promise(r => setTimeout(r, 100));
-      }
+      if (continueLoop) await new Promise(r => setTimeout(r, 100));
     }
 
-    // Mark run as completed
     const finalState = await readRunState(runDir);
     const hasFailed = Object.values(finalState.steps).some(s => s.status === 'failed');
     const isPaused = finalState.status === 'paused';
@@ -319,11 +529,7 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
       }));
     }
 
-    return {
-      runId: effectiveRunId,
-      runDir,
-      runState: await readRunState(runDir),
-    };
+    return { runId: effectiveRunId, runDir, runState: await readRunState(runDir) };
   } finally {
     watchdog.stop();
   }
