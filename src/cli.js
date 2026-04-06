@@ -241,6 +241,23 @@ async function cmdInit([]) {
     console.log(`✓ Created ${d}/`);
   }
 
+  // Copy default flows, step-templates and templates from the package
+  const packageRoot = path.resolve(__dirname, '..');
+  for (const dir of ['flows', 'step-templates', 'templates']) {
+    const srcDir = path.join(packageRoot, dir);
+    const destDir = path.resolve(process.cwd(), dir);
+    try {
+      const files = await fs.readdir(srcDir);
+      for (const file of files) {
+        const dest = path.join(destDir, file);
+        if (!fsSync.existsSync(dest)) {
+          await fs.copyFile(path.join(srcDir, file), dest);
+          console.log(`✓ Copied ${dir}/${file}`);
+        }
+      }
+    } catch {}
+  }
+
   const configPath = path.resolve(process.cwd(), 'agentflow.config.yaml');
   if (!fsSync.existsSync(configPath)) {
     const yaml = require('js-yaml');
