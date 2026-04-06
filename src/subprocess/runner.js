@@ -29,16 +29,22 @@ async function spawnSubprocess({
   sentinelDir,
   promptContent,
   command = 'claude',
-  args = [],
+  args = ['-p', '--output-format', 'json', '--no-session-persistence'],
   timeout = 120000,
 }) {
-  // Write prompt.md before spawning
+  // Write prompt.md before spawning (for debugging / inspection)
   await fs.writeFile(path.join(sentinelDir, 'prompt.md'), promptContent, 'utf8');
 
   return new Promise((resolve) => {
     const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // pipe stdin so we can stream the prompt; pipe stdout/stderr for capture
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // Send prompt via stdin, then close it; ignore errors if process exits early
+    proc.stdin.on('error', () => {});
+    proc.stdin.write(promptContent, 'utf8');
+    proc.stdin.end();
 
     // Write .pid immediately
     fs.writeFile(path.join(sentinelDir, '.pid'), String(proc.pid), 'utf8').catch(() => {});

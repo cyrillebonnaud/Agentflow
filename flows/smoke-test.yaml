@@ -1,0 +1,12 @@
+flow:
+  id: smoke-test-v1
+  name: Smoke Test
+  description: Single explore step — validates the full subprocess pipeline.
+
+  steps:
+    - id: hello
+      type: explore
+      lead: product-team/product-manager
+      artifact: hello.md
+      context:
+        - product-team/product-vision

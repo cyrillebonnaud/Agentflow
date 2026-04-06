@@ -13,7 +13,7 @@ flow:
 
     - id: select-architecture
       type: decide
-      agent: engineering-lead
+      lead: engineering-lead
       depends_on: [architecture]
 
     - id: tech-writing
