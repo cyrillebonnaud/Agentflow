@@ -217,7 +217,7 @@ async function cmdValidate([flowFile]) {
     let errors = 0;
     for (const step of steps) {
       if (!step.id) { console.error(`  ✗ Step missing 'id'`); errors++; }
-      if (!step.type && !step.extends) { console.error(`  ✗ Step '${step.id}': missing 'type' or 'extends'`); errors++; }
+      if (!step.lead && !step.agent) { console.error(`  ✗ Step '${step.id}': missing 'lead' or 'agent'`); errors++; }
     }
 
     if (errors === 0) {
