@@ -21,7 +21,7 @@
     "flows/",
     "templates/",
     "step-templates/",
-    "sample-plugin/"
+    "agents/"
   ],
   "keywords": ["claude", "claude-code", "agentflow", "ai", "agents", "orchestration", "multi-agent", "llm"],
   "license": "MIT",

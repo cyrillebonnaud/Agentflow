@@ -264,8 +264,8 @@ async function cmdInit([]) {
     } catch {}
   }
 
-  // Copy sample-plugin agent teams into agentflow/
-  const samplePluginDir = path.join(packageRoot, 'sample-plugin');
+  // Copy agents agent teams into agentflow/
+  const samplePluginDir = path.join(packageRoot, 'agents');
   try {
     const teams = await fs.readdir(samplePluginDir);
     for (const team of teams) {
@@ -430,7 +430,7 @@ async function cmdInstall() {
       } catch {}
     }
     // Copy agent teams
-    const samplePluginDir = path.join(packageRoot, 'sample-plugin');
+    const samplePluginDir = path.join(packageRoot, 'agents');
     try {
       const teams = await fs.readdir(samplePluginDir);
       for (const team of teams) {
