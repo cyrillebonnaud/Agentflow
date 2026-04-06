@@ -346,7 +346,7 @@ async function executeRefineStep(step, runState, registry, runDir, pool, watchdo
         type: 'decisions',
       });
       await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
-      // artifactPath is relative e.g. "artifacts/writing/v1/writing.md"
+      // artifactPath is relative e.g. "artifacts/writing/v1/writing.draft.md"
       const reviewPath = path.join(runDir, path.dirname(artifactPath), `${stepId}.review.md`);
       const runId = path.basename(runDir);
       console.log(`\n✏️  Review and edit: ${reviewPath}`);
@@ -417,7 +417,7 @@ async function promoteReviewedArtifacts(runDir, resolvedSteps) {
     const artifactAbsPath = path.join(runDir, artifactRelPath);
     const vDir = path.dirname(artifactAbsPath);
     const reviewPath = path.join(vDir, `${step.id}.review.md`);
-    const finalPath = path.join(vDir, `${step.id}_final.md`);
+    const approvedPath = path.join(vDir, `${step.id}.md`);
 
     let reviewContent;
     try {
@@ -426,12 +426,12 @@ async function promoteReviewedArtifacts(runDir, resolvedSteps) {
       continue; // no review file, skip
     }
 
-    // Create _final.md and update the main artifact so downstream steps get approved content
-    await fs.writeFile(finalPath, reviewContent, 'utf8');
-    await fs.writeFile(artifactAbsPath, reviewContent, 'utf8');
-    await markStepStatus(runDir, step.id, 'done');
+    // Create <stepId>.md (approved) and update artifact_path in run.json
+    await fs.writeFile(approvedPath, reviewContent, 'utf8');
+    const newRelPath = `${path.relative(runDir, approvedPath)}`;
+    await markStepStatus(runDir, step.id, 'done', { artifact_path: newRelPath });
     await updateRunState(runDir, s => ({ ...s, status: 'running' }));
-    console.log(`✓ Approved: ${path.relative(runDir, finalPath)}`);
+    console.log(`✓ Approved: ${newRelPath}`);
   }
 }
 

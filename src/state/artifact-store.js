@@ -46,10 +46,10 @@ async function storeArtifact(runDir, stepId, content, trackSlug) {
   const vDir = path.join(runDir, 'artifacts', stepId, `v${version}`);
   await fs.mkdir(vDir, { recursive: true });
 
-  await fs.writeFile(path.join(vDir, `${stepId}.md`), content, 'utf8');
+  await fs.writeFile(path.join(vDir, `${stepId}.draft.md`), content, 'utf8');
   await fs.writeFile(path.join(vDir, `${stepId}.review.md`), content, 'utf8');
 
-  return `artifacts/${stepId}/v${version}/${stepId}.md`;
+  return `artifacts/${stepId}/v${version}/${stepId}.draft.md`;
 }
 
 /**
@@ -65,10 +65,12 @@ async function readArtifact(runDir, stepId, trackSlug) {
   if (trackSlug) {
     absPath = path.join(runDir, 'artifacts', stepId, `${trackSlug}.md`);
   } else {
-    // Read latest version: artifacts/<stepId>/v<N>/<stepId>.md
+    // Read latest version: prefer .md (approved) then .draft.md
     const version = (await nextVersion(runDir, stepId)) - 1;
     if (version < 1) return null;
-    absPath = path.join(runDir, 'artifacts', stepId, `v${version}`, `${stepId}.md`);
+    const vDir = path.join(runDir, 'artifacts', stepId, `v${version}`);
+    const approvedPath = path.join(vDir, `${stepId}.md`);
+    absPath = fsSync.existsSync(approvedPath) ? approvedPath : path.join(vDir, `${stepId}.draft.md`);
   }
 
   try {
@@ -111,10 +113,13 @@ async function listArtifacts(runDir) {
       const latest = versionDirs.sort((a, b) => {
         return parseInt(a.name.slice(1)) - parseInt(b.name.slice(1));
       }).at(-1).name;
+      // Prefer approved .md, fallback to .draft.md
+      const approvedAbs = path.join(stepDir, latest, `${stepId}.md`);
+      const mainFile = fsSync.existsSync(approvedAbs) ? `${stepId}.md` : `${stepId}.draft.md`;
       results.push({
         stepId,
         trackSlug: null,
-        path: `artifacts/${stepId}/${latest}/${stepId}.md`,
+        path: `artifacts/${stepId}/${latest}/${mainFile}`,
       });
     } else {
       // Multi-track layout: artifacts/<stepId>/<trackSlug>.md
