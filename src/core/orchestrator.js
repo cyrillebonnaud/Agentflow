@@ -469,7 +469,7 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
 
   // Initialize run
   const crypto = require('node:crypto');
-  const effectiveRunId = runId || `${flowId}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex')}`;
+  const effectiveRunId = runId || `${flowId}-${crypto.randomBytes(3).toString('hex')}`;
   const runDir = path.join(runsDir, effectiveRunId);
 
   try {
