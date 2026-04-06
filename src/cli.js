@@ -406,6 +406,43 @@ async function cmdInstall() {
 
   console.log(`\n✓ ${installed} skill(s) installed to .claude/skills/`);
   console.log(`  Skills are now available as slash commands in Claude Code.`);
+
+  // Copy missing agentflow assets (flows, step-templates, templates, agents)
+  const packageRoot = path.resolve(__dirname, '..');
+  const agentflowDir = path.resolve(process.cwd(), 'agentflow');
+  const hasAgentflowDir = fsSync.existsSync(agentflowDir);
+
+  if (hasAgentflowDir) {
+    // Only copy files that don't exist yet (never overwrite user customizations)
+    for (const dir of ['flows', 'step-templates', 'templates']) {
+      const srcDir = path.join(packageRoot, dir);
+      const destDir = path.join(agentflowDir, dir);
+      await fs.mkdir(destDir, { recursive: true });
+      try {
+        const files = await fs.readdir(srcDir);
+        for (const file of files) {
+          const dest = path.join(destDir, file);
+          if (!fsSync.existsSync(dest)) {
+            await fs.copyFile(path.join(srcDir, file), dest);
+            console.log(`✓ Added agentflow/${dir}/${file}`);
+          }
+        }
+      } catch {}
+    }
+    // Copy agent teams
+    const samplePluginDir = path.join(packageRoot, 'sample-plugin');
+    try {
+      const teams = await fs.readdir(samplePluginDir);
+      for (const team of teams) {
+        const srcTeam = path.join(samplePluginDir, team);
+        const destTeam = path.join(agentflowDir, team);
+        if ((await fs.stat(srcTeam)).isDirectory() && !fsSync.existsSync(destTeam)) {
+          await copyDirRecursive(srcTeam, destTeam);
+          console.log(`✓ Added agentflow/${team}/`);
+        }
+      }
+    } catch {}
+  }
 }
 
 // ─── help ────────────────────────────────────────────────────────────────────
