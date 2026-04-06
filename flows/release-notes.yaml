@@ -4,7 +4,9 @@ flow:
   description: Generates polished release notes from a change summary.
   steps:
     - id: writing
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: ux-writer
       reviewers: [product-manager, tech-writer]
       artifacts:

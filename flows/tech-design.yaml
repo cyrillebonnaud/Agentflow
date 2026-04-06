@@ -4,7 +4,9 @@ flow:
   description: Generates architecture approaches and a tech spec with engineering review.
   steps:
     - id: architecture
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: tech-architect
       reviewers: [engineering-lead]
       artifact_type: md
@@ -17,7 +19,9 @@ flow:
       depends_on: [architecture]
 
     - id: tech-writing
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: tech-writer
       reviewers: [engineering-lead, qa-reviewer]
       tracks: inherit

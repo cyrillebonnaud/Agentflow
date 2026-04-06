@@ -20,7 +20,6 @@
     "skills/",
     "flows/",
     "templates/",
-    "step-templates/",
     "agents/"
   ],
   "keywords": ["claude", "claude-code", "agentflow", "ai", "agents", "orchestration", "multi-agent", "llm"],

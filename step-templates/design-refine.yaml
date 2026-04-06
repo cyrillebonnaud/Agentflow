@@ -1,5 +1,0 @@
-type: refine
-reviewers: [design-critic, ux-researcher]
-moderator: moderator
-max_iterations: 2
-max_rounds: 2

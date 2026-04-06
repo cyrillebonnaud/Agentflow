@@ -238,7 +238,6 @@ async function cmdInit([]) {
   const agentflowDir = path.resolve(process.cwd(), 'agentflow');
   const dirs = [
     path.join(agentflowDir, 'flows'),
-    path.join(agentflowDir, 'step-templates'),
     path.join(agentflowDir, 'templates'),
     path.resolve(process.cwd(), 'runs'),
   ];
@@ -247,9 +246,9 @@ async function cmdInit([]) {
     console.log(`✓ Created ${path.relative(process.cwd(), d)}/`);
   }
 
-  // Copy default flows, step-templates, templates and agents from the package
+  // Copy default flows, templates and agents from the package
   const packageRoot = path.resolve(__dirname, '..');
-  for (const dir of ['flows', 'step-templates', 'templates']) {
+  for (const dir of ['flows', 'templates']) {
     const srcDir = path.join(packageRoot, dir);
     const destDir = path.join(agentflowDir, dir);
     try {
@@ -295,7 +294,7 @@ async function cmdInit([]) {
         max_reviewer_parallel: 6,
         max_moderator_parallel: 4,
       },
-      paths: { flows: './agentflow/flows', step_templates: './agentflow/step-templates', templates: './agentflow/templates', runs: './runs' },
+      paths: { flows: './agentflow/flows', templates: './agentflow/templates', runs: './runs' },
     };
     await fs.writeFile(configPath, yaml.dump(config), 'utf8');
     console.log(`✓ Created agentflow.config.yaml`);
@@ -418,7 +417,7 @@ async function cmdInstall() {
 
   if (hasAgentflowDir) {
     // Only copy files that don't exist yet (never overwrite user customizations)
-    for (const dir of ['flows', 'step-templates', 'templates']) {
+    for (const dir of ['flows', 'templates']) {
       const srcDir = path.join(packageRoot, dir);
       const destDir = path.join(agentflowDir, dir);
       await fs.mkdir(destDir, { recursive: true });

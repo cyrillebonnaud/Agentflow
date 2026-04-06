@@ -4,7 +4,9 @@ flow:
   description: Generates 2 one-pager variants with light review.
   steps:
     - id: writing
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: product-manager
       reviewers: [product-critic, ux-writer]
       artifact_type: html

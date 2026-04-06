@@ -4,13 +4,17 @@ flow:
   description: Generates a full PRD with market research, tech review, and optional legal review.
   steps:
     - id: market-research
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: market-researcher
       artifacts:
         - name: market-research.md
 
     - id: prd-writing
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: product-manager
       reviewers: [product-critic, tech-architect, ux-researcher]
       depends_on: [market-research]
@@ -21,7 +25,9 @@ flow:
         - flow.input
 
     - id: tech-review
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: tech-architect
       reviewers: [engineering-lead, qa-reviewer]
       depends_on: [prd-writing]
@@ -32,7 +38,9 @@ flow:
         - artifacts.market-research
 
     - id: legal-review
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: product-manager
       depends_on: [prd-writing]
       condition: "flow.input contains 'enterprise' or artifacts.prd contains 'compliance'"

@@ -4,7 +4,9 @@ flow:
   description: Generates a user story map with cross-functional review.
   steps:
     - id: story-mapping
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: product-manager
       reviewers: [product-critic, ux-researcher, engineering-lead]
       artifacts:

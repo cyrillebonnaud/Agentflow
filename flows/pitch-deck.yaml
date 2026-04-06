@@ -4,13 +4,17 @@ flow:
   description: Generates pitch deck variants with market research, writing, and design review.
   steps:
     - id: market-research
-      extends: step-templates/standard-refine.yaml
+      type: refine
+      max_iterations: 3
+      max_rounds: 2
       lead: market-researcher
       artifacts:
         - name: market-research.md
 
     - id: pitch-writing
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: product-manager
       reviewers: [product-critic, ux-writer]
       artifact_type: html
@@ -25,7 +29,9 @@ flow:
       depends_on: [pitch-writing]
 
     - id: design-review
-      extends: step-templates/design-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 2
       lead: ux-designer
       tracks: inherit
       depends_on: [select-pitch]

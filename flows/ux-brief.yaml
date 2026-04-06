@@ -4,13 +4,16 @@ flow:
   description: Generates UX directions and a detailed brief with user research and copy review.
   steps:
     - id: user-research
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: ux-researcher
       artifacts:
         - name: user-research.md
 
     - id: ux-directions
-      extends: step-templates/explore.yaml
+      type: explore
+      max_iterations: 1
       lead: ux-designer
       depends_on: [user-research]
       artifact_type: md
@@ -25,7 +28,9 @@ flow:
       depends_on: [ux-directions]
 
     - id: ux-detail
-      extends: step-templates/design-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 2
       lead: ux-designer
       reviewers: [design-critic, ui-designer]
       tracks: inherit
@@ -38,7 +43,9 @@ flow:
         - user_feedback.ux-directions.decisions
 
     - id: copy-review
-      extends: step-templates/light-refine.yaml
+      type: refine
+      max_iterations: 2
+      max_rounds: 1
       lead: ux-writer
       reviewers: [design-critic]
       tracks: inherit
