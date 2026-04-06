@@ -29,11 +29,5 @@ Validates the flow YAML file and reports any errors before execution.
 ## Steps
 
 ```bash
-node "$(npm root -g)/agentflow/src/cli.js" validate $ARGUMENTS
-```
-
-If not globally installed:
-
-```bash
 npx agentflow validate $ARGUMENTS
 ```

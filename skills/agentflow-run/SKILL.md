@@ -38,11 +38,5 @@ Execute a declarative flow defined in a YAML file. This starts the Agentflow orc
 Run the flow:
 
 ```bash
-node "$(npm root -g)/agentflow/src/cli.js" run $ARGUMENTS
-```
-
-If not globally installed, try:
-
-```bash
 npx agentflow run $ARGUMENTS
 ```

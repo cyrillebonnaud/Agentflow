@@ -278,28 +278,41 @@ async function cmdInit([]) {
 // ─── install ─────────────────────────────────────────────────────────────────
 
 async function cmdInstall() {
-  const claudeDir = path.join(process.env.HOME || process.env.USERPROFILE || '', '.claude');
-  const settingsPath = path.join(claudeDir, 'settings.json');
+  // Copy skills from this package into .claude/skills/ in the current project.
+  // Claude Code discovers skills from .claude/skills/<name>/SKILL.md — same
+  // mechanism used by OpenSpec and other Claude Code plugins.
+  const packageSkillsDir = path.resolve(__dirname, '..', 'skills');
+  const projectSkillsDir = path.resolve(process.cwd(), '.claude', 'skills');
 
-  let settings = {};
-  try {
-    const raw = await fs.readFile(settingsPath, 'utf8');
-    settings = JSON.parse(raw);
-  } catch {}
+  await fs.mkdir(projectSkillsDir, { recursive: true });
 
-  // Find our plugin root
-  const pluginRoot = path.resolve(__dirname, '..');
+  const skillDirs = await fs.readdir(packageSkillsDir);
+  let installed = 0;
 
-  if (!settings.pluginDirectories) settings.pluginDirectories = [];
-  if (!settings.pluginDirectories.includes(pluginRoot)) {
-    settings.pluginDirectories.push(pluginRoot);
-    await fs.mkdir(claudeDir, { recursive: true });
-    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-    console.log(`✓ Registered plugin: ${pluginRoot}`);
-    console.log(`✓ Restart Claude Code to activate skills`);
-  } else {
-    console.log(`✓ Plugin already registered`);
+  for (const skillName of skillDirs) {
+    const src = path.join(packageSkillsDir, skillName, 'SKILL.md');
+    const destDir = path.join(projectSkillsDir, skillName);
+    const dest = path.join(destDir, 'SKILL.md');
+
+    try {
+      await fs.access(src);
+    } catch {
+      continue; // skip entries without SKILL.md
+    }
+
+    await fs.mkdir(destDir, { recursive: true });
+    await fs.copyFile(src, dest);
+    console.log(`✓ Installed skill: ${skillName}`);
+    installed++;
   }
+
+  if (installed === 0) {
+    console.error('No skills found to install.');
+    process.exit(1);
+  }
+
+  console.log(`\n✓ ${installed} skill(s) installed to .claude/skills/`);
+  console.log(`  Skills are now available as slash commands in Claude Code.`);
 }
 
 // ─── help ────────────────────────────────────────────────────────────────────

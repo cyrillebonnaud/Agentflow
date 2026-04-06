@@ -26,11 +26,5 @@ Reconciles `.done`/`.failed` sentinel files against `run.json` state, then conti
 ## Steps
 
 ```bash
-node "$(npm root -g)/agentflow/src/cli.js" resume $ARGUMENTS
-```
-
-If not globally installed:
-
-```bash
 npx agentflow resume $ARGUMENTS
 ```

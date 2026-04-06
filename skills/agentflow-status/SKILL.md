@@ -21,11 +21,5 @@ Displays the current state of a run: step statuses, artifact locations, and over
 ## Steps
 
 ```bash
-node "$(npm root -g)/agentflow/src/cli.js" status $ARGUMENTS
-```
-
-If not globally installed:
-
-```bash
 npx agentflow status $ARGUMENTS
 ```
