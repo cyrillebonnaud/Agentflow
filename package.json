@@ -22,7 +22,7 @@
     "step-templates/",
     ".claude-plugin/"
   ],
-  "keywords": ["claude", "agentflow", "ai", "orchestration"],
+  "keywords": ["claude", "claude-code", "agentflow", "ai", "agents", "orchestration", "multi-agent", "llm"],
   "license": "MIT",
   "dependencies": {
     "js-yaml": "^4.1.0",
