@@ -24,17 +24,21 @@ Everything is a file. No cloud dependency. No new auth to manage — subprocesse
 
 ## Installation
 
-```bash
-npm install -g agentflow
-agentflow install          # registers the Claude Code plugin
-```
-
-Or as a project-local dev dependency:
+From GitHub (no npm account needed):
 
 ```bash
-npm install --save-dev agentflow
+npm install github:cyrillebonnaud/agentflow
 npx agentflow install
 ```
+
+Or as a global install (once npm is published):
+
+```bash
+npm install -g agentflow
+agentflow install
+```
+
+`agentflow install` copies the slash commands into `.claude/skills/` so Claude Code picks them up automatically.
 
 Node ≥ 18 required.
 
