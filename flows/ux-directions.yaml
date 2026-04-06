@@ -8,10 +8,11 @@ flow:
       reviewers: [ux-researcher, design-critic]
       max_iterations: 2
       max_rounds: 1
+      artifact_type: html
       artifacts:
-        - name: direction-1.md
-        - name: direction-2.md
-        - name: direction-3.md
+        - name: direction-1.html
+        - name: direction-2.html
+        - name: direction-3.html
       context:
         - flow.input
 
@@ -26,8 +27,9 @@ flow:
       max_rounds: 2
       tracks: inherit
       depends_on: [select-direction]
+      artifact_type: html
       artifacts:
-        - name: ux-direction.md
+        - name: ux-direction.html
       context:
         - artifacts.ux-directions.{{track}}
         - flow.input
