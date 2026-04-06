@@ -235,28 +235,48 @@ async function cmdValidate([flowFile]) {
 // ─── init ────────────────────────────────────────────────────────────────────
 
 async function cmdInit([]) {
-  const dirs = ['flows', 'step-templates', 'templates', 'runs'];
+  const agentflowDir = path.resolve(process.cwd(), 'agentflow');
+  const dirs = [
+    path.join(agentflowDir, 'flows'),
+    path.join(agentflowDir, 'step-templates'),
+    path.join(agentflowDir, 'templates'),
+    path.resolve(process.cwd(), 'runs'),
+  ];
   for (const d of dirs) {
-    await fs.mkdir(path.resolve(process.cwd(), d), { recursive: true });
-    console.log(`✓ Created ${d}/`);
+    await fs.mkdir(d, { recursive: true });
+    console.log(`✓ Created ${path.relative(process.cwd(), d)}/`);
   }
 
-  // Copy default flows, step-templates and templates from the package
+  // Copy default flows, step-templates, templates and agents from the package
   const packageRoot = path.resolve(__dirname, '..');
   for (const dir of ['flows', 'step-templates', 'templates']) {
     const srcDir = path.join(packageRoot, dir);
-    const destDir = path.resolve(process.cwd(), dir);
+    const destDir = path.join(agentflowDir, dir);
     try {
       const files = await fs.readdir(srcDir);
       for (const file of files) {
         const dest = path.join(destDir, file);
         if (!fsSync.existsSync(dest)) {
           await fs.copyFile(path.join(srcDir, file), dest);
-          console.log(`✓ Copied ${dir}/${file}`);
+          console.log(`✓ Copied agentflow/${dir}/${file}`);
         }
       }
     } catch {}
   }
+
+  // Copy sample-plugin agent teams into agentflow/
+  const samplePluginDir = path.join(packageRoot, 'sample-plugin');
+  try {
+    const teams = await fs.readdir(samplePluginDir);
+    for (const team of teams) {
+      const srcTeam = path.join(samplePluginDir, team);
+      const destTeam = path.join(agentflowDir, team);
+      if ((await fs.stat(srcTeam)).isDirectory()) {
+        await copyDirRecursive(srcTeam, destTeam);
+        console.log(`✓ Copied agentflow/${team}/`);
+      }
+    }
+  } catch {}
 
   const configPath = path.resolve(process.cwd(), 'agentflow.config.yaml');
   if (!fsSync.existsSync(configPath)) {
@@ -271,7 +291,7 @@ async function cmdInit([]) {
         max_reviewer_parallel: 6,
         max_moderator_parallel: 4,
       },
-      paths: { flows: './flows', step_templates: './step-templates', templates: './templates', runs: './runs' },
+      paths: { flows: './agentflow/flows', step_templates: './agentflow/step-templates', templates: './agentflow/templates', runs: './runs' },
     };
     await fs.writeFile(configPath, yaml.dump(config), 'utf8');
     console.log(`✓ Created agentflow.config.yaml`);
@@ -297,10 +317,29 @@ async function cmdInit([]) {
   await cmdInstall();
 }
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+async function copyDirRecursive(src, dest) {
+  await fs.mkdir(dest, { recursive: true });
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirRecursive(srcPath, destPath);
+    } else if (!fsSync.existsSync(destPath)) {
+      await fs.copyFile(srcPath, destPath);
+    }
+  }
+}
+
 // ─── list ────────────────────────────────────────────────────────────────────
 
 async function cmdList() {
-  const flowsDir = path.resolve(process.cwd(), 'flows');
+  // Support both agentflow/flows/ (new layout) and flows/ (legacy)
+  const flowsDir = fsSync.existsSync(path.resolve(process.cwd(), 'agentflow/flows'))
+    ? path.resolve(process.cwd(), 'agentflow/flows')
+    : path.resolve(process.cwd(), 'flows');
 
   let files;
   try {

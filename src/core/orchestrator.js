@@ -420,9 +420,20 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
   let reg = registry;
   if (!reg) {
     const pluginDirs = [];
+    // Global plugins (~/.claude/plugins/)
     try {
       const entries = await fs.readdir(pluginsDir);
       for (const e of entries) pluginDirs.push(path.join(pluginsDir, e));
+    } catch {}
+    // Local project agents (agentflow/<team>/ subdirs next to flows/)
+    const localAgentflowDir = path.join(path.dirname(flowFile), '..');
+    try {
+      const entries = await fs.readdir(localAgentflowDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isDirectory() && !['flows', 'step-templates', 'templates'].includes(e.name)) {
+          pluginDirs.push(path.join(localAgentflowDir, e.name));
+        }
+      }
     } catch {}
     reg = await buildRegistry({ pluginDirs, localTemplatesDir });
   }
