@@ -425,16 +425,10 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
       const entries = await fs.readdir(pluginsDir);
       for (const e of entries) pluginDirs.push(path.join(pluginsDir, e));
     } catch {}
-    // Local project agents (agentflow/<team>/ subdirs next to flows/)
+    // Local project agents — treat agentflow/ itself as a plugin dir
+    // (contains agents/, skills/, context/ directly)
     const localAgentflowDir = path.join(path.dirname(flowFile), '..');
-    try {
-      const entries = await fs.readdir(localAgentflowDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (e.isDirectory() && !['flows', 'step-templates', 'templates'].includes(e.name)) {
-          pluginDirs.push(path.join(localAgentflowDir, e.name));
-        }
-      }
-    } catch {}
+    pluginDirs.push(localAgentflowDir);
     reg = await buildRegistry({ pluginDirs, localTemplatesDir });
   }
 

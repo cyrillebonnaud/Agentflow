@@ -264,18 +264,22 @@ async function cmdInit([]) {
     } catch {}
   }
 
-  // Copy agents agent teams into agentflow/
-  const samplePluginDir = path.join(packageRoot, 'agents');
+  // Copy flat agents/, skills/, context/ into agentflow/
+  const packageAgentsDir = path.join(packageRoot, 'agents');
   try {
-    const teams = await fs.readdir(samplePluginDir);
-    for (const team of teams) {
-      const srcTeam = path.join(samplePluginDir, team);
-      const destTeam = path.join(agentflowDir, team);
-      if ((await fs.stat(srcTeam)).isDirectory()) {
-        await copyDirRecursive(srcTeam, destTeam);
-        console.log(`✓ Copied agentflow/${team}/`);
+    for (const dir of ['agents', 'skills', 'context']) {
+      const srcDir = path.join(packageAgentsDir, dir);
+      const destDir = path.join(agentflowDir, dir);
+      await fs.mkdir(destDir, { recursive: true });
+      const files = await fs.readdir(srcDir);
+      for (const file of files) {
+        const dest = path.join(destDir, file);
+        if (!fsSync.existsSync(dest)) {
+          await fs.copyFile(path.join(srcDir, file), dest);
+        }
       }
     }
+    console.log(`✓ Copied agentflow/agents/ agentflow/skills/ agentflow/context/`);
   } catch {}
 
   const configPath = path.resolve(process.cwd(), 'agentflow.config.yaml');
@@ -429,16 +433,20 @@ async function cmdInstall() {
         }
       } catch {}
     }
-    // Copy agent teams
-    const samplePluginDir = path.join(packageRoot, 'agents');
+    // Copy flat agents/, skills/, context/
+    const packageAgentsDir = path.join(packageRoot, 'agents');
     try {
-      const teams = await fs.readdir(samplePluginDir);
-      for (const team of teams) {
-        const srcTeam = path.join(samplePluginDir, team);
-        const destTeam = path.join(agentflowDir, team);
-        if ((await fs.stat(srcTeam)).isDirectory() && !fsSync.existsSync(destTeam)) {
-          await copyDirRecursive(srcTeam, destTeam);
-          console.log(`✓ Added agentflow/${team}/`);
+      for (const dir of ['agents', 'skills', 'context']) {
+        const srcDir = path.join(packageAgentsDir, dir);
+        const destDir = path.join(agentflowDir, dir);
+        await fs.mkdir(destDir, { recursive: true });
+        const files = await fs.readdir(srcDir);
+        for (const file of files) {
+          const dest = path.join(destDir, file);
+          if (!fsSync.existsSync(dest)) {
+            await fs.copyFile(path.join(srcDir, file), dest);
+            console.log(`✓ Added agentflow/${dir}/${file}`);
+          }
         }
       }
     } catch {}
