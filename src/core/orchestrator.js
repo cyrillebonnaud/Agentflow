@@ -408,10 +408,12 @@ async function promoteReviewedArtifacts(runDir, resolvedSteps) {
   const runState = await readRunState(runDir);
   for (const step of resolvedSteps) {
     const stepState = runState.steps[step.id];
-    if (!stepState || stepState.status !== 'awaiting_user_feedback') continue;
+    if (!stepState || !['awaiting_user_feedback', 'awaiting_validation'].includes(stepState.status)) continue;
 
-    // artifact_path = e.g. "artifacts/writing/v1/writing.md"
-    const artifactRelPath = stepState.artifact_path;
+    // artifact_path lives in the first track (single-track steps)
+    const tracks = stepState.tracks || {};
+    const firstTrack = Object.values(tracks)[0];
+    const artifactRelPath = firstTrack?.artifact_path;
     if (!artifactRelPath) continue;
 
     const artifactAbsPath = path.join(runDir, artifactRelPath);
