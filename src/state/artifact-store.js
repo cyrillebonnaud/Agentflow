@@ -19,12 +19,15 @@ async function storeArtifact(runDir, stepId, content, trackSlug) {
     relPath = `artifacts/${stepId}/${trackSlug}.md`;
     absPath = path.join(runDir, 'artifacts', stepId, `${trackSlug}.md`);
     await fs.mkdir(path.join(runDir, 'artifacts', stepId), { recursive: true });
+    await fs.writeFile(absPath, content, 'utf8');
   } else {
     relPath = `artifacts/${stepId}.md`;
     absPath = path.join(runDir, 'artifacts', `${stepId}.md`);
+    await fs.writeFile(absPath, content, 'utf8');
+    // Save editable copy for user review
+    await fs.writeFile(path.join(runDir, 'artifacts', `${stepId}.review.md`), content, 'utf8');
   }
 
-  await fs.writeFile(absPath, content, 'utf8');
   return relPath;
 }
 

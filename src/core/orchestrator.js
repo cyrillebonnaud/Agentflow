@@ -345,8 +345,11 @@ async function executeRefineStep(step, runState, registry, runDir, pool, watchdo
         question: `Review synthesis for step "${stepId}" track "${track.slug}" and provide feedback.`,
         type: 'decisions',
       });
-      // In Phase 1b we pause here — user resumes with /agentflow:resume
       await updateRunState(runDir, s => ({ ...s, status: 'paused' }));
+      const reviewPath = path.join(runDir, 'artifacts', `${stepId}.review.md`);
+      const runId = path.basename(runDir);
+      console.log(`\n✏️  Review and edit: ${reviewPath}`);
+      console.log(`▶  When done: npx agentflow resume ${runId}\n`);
       return; // stop execution, user must resume
     }
   }
@@ -396,6 +399,38 @@ async function executeDecideStep(step, runState, registry, runDir, pool, watchdo
 }
 
 /**
+ * On resume: for each step awaiting_user_feedback, if .review.md was edited,
+ * create <stepId>_final.md and overwrite <stepId>.md with the approved content.
+ * Then mark the step as done so the main loop can continue.
+ */
+async function promoteReviewedArtifacts(runDir, resolvedSteps) {
+  const runState = await readRunState(runDir);
+  for (const step of resolvedSteps) {
+    const stepState = runState.steps[step.id];
+    if (!stepState || stepState.status !== 'awaiting_user_feedback') continue;
+
+    const artifactsDir = path.join(runDir, 'artifacts');
+    const reviewPath = path.join(artifactsDir, `${step.id}.review.md`);
+    const finalPath = path.join(artifactsDir, `${step.id}_final.md`);
+    const artifactPath = path.join(artifactsDir, `${step.id}.md`);
+
+    let reviewContent;
+    try {
+      reviewContent = await fs.readFile(reviewPath, 'utf8');
+    } catch {
+      continue; // no review file, skip
+    }
+
+    // Create _final.md and overwrite .md so downstream steps get the approved version
+    await fs.writeFile(finalPath, reviewContent, 'utf8');
+    await fs.writeFile(artifactPath, reviewContent, 'utf8');
+    await markStepStatus(runDir, step.id, 'done');
+    await updateRunState(runDir, s => ({ ...s, status: 'running' }));
+    console.log(`✓ Approved: ${step.id}_final.md`);
+  }
+}
+
+/**
  * Main orchestrator — runs a flow from start to finish.
  */
 async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = null, runId = null }) {
@@ -441,7 +476,8 @@ async function runFlow({ flowFile, flowInput, runsDir, config = {}, registry = n
     await initRun({ runDir, flowId, flowFile, flowInput, steps: resolvedSteps });
   } catch (err) {
     if (!err.message.includes('already exists')) throw err;
-    // Resume mode — run already initialized
+    // Resume mode — promote any edited .to_review.md files to final artifacts
+    await promoteReviewedArtifacts(runDir, resolvedSteps);
   }
 
   // Set up concurrency infrastructure
